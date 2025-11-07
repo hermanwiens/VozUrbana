@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastrar Problemas em seu Bairro</title>
+    <link rel="stylesheet" href="public/css/style.css">
+    <style>
+        /* Esconde o select visualmente, mas mantém no DOM para submissão */
+        .hidden-select {
+            position: absolute !important;
+            left: -9999px !important;
+            width: 1px !important;
+            height: 1px !important;
+            overflow: hidden !important;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Cadastrar Problemas em seu Bairro</h1>
+        <p>Informe os dados para registrar um novo problema</p>
+    </header>
+
+    <main>
+        <?php
+        // $errors, $old e $tipos são definidos pelo controller (form())
+        $errors = $errors ?? [];
+        $old = $old ?? [];
+        $tipos = $tipos ?? [];
+
+        if (!empty($errors)): ?>
+            <div style="max-width:600px;margin:0 auto;background:#ffe6e6;border:1px solid #ffb3b3;padding:12px;border-radius:6px;">
+                <strong>Foram encontrados os seguintes erros:</strong>
+                <ul>
+                    <?php foreach ($errors as $err): ?>
+                        <li><?= htmlspecialchars($err) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <form method="post" action="index.php?action=salvar" enctype="multipart/form-data" style="max-width:600px;margin:16px auto;">
+            <!-- Input com datalist exibindo os tipos (apenas valores) -->
+            <label for="tipo_input">Tipo de Problema:</label><br>
+            <input list="tipos_list" id="tipo_input" name="tipo" required
+                   style="width:100%;padding:8px;border-radius:5px;"
+                   placeholder="Digite ou escolha um tipo"
+                   value="<?= htmlspecialchars($old['tipo'] ?? '') ?>">
+            <datalist id="tipos_list">
+                <?php foreach ($tipos as $t): ?>
+                    <option value="<?= htmlspecialchars($t->nome) ?>"></option>
+                <?php endforeach; ?>
+                <option value="Outro"></option>
+            </datalist>
+            <br><br>
+
+            <!-- Select oculto que o controller espera (tipo_select).
+                 Ele será atualizado via JS com o id correspondente ou 'other'. -->
+            <select id="tipo_select" name="tipo_select" class="hidden-select" required>
+                <option value="">-- selecione --</option>
+                <?php foreach ($tipos as $t): ?>
+                    <option value="<?= htmlspecialchars($t->id) ?>"
+                        <?= (isset($old['tipo_select']) && $old['tipo_select'] == $t->id) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($t->nome) ?>
+                    </option>
+                <?php endforeach; ?>
+                <option value="other" <?= (isset($old['tipo_select']) && $old['tipo_select']=='other') ? 'selected' : '' ?>>Outro</option>
+            </select>
+
+            <!-- Campo extra visível se for 'Outro' (sincronizado por JS) -->
+            <div id="tipo_outro_wrapper" style="display: <?= (isset($old['tipo_select']) && $old['tipo_select']=='other') ? 'block' : 'none' ?>;">
+                <label for="tipo_outro">Especifique o tipo (se escolheu 'Outro'):</label><br>
+                <input type="text" id="tipo_outro" name="tipo_outro" value="<?= htmlspecialchars($old['tipo'] ?? '') ?>"><br><br>
+            </div>
+
+            <label for="descricao">Descrição:</label><br>
+            <textarea id="descricao" name="descricao" rows="4" required><?= htmlspecialchars($old['descricao'] ?? '') ?></textarea><br><br>
+
+            <label for="latitude">Latitude:</label><br>
+            <input type="text" id="latitude" name="latitude" required value="<?= htmlspecialchars($old['latitude'] ?? '') ?>"><br><br>
+
+            <label for="longitude">Longitude:</label><br>
+            <input type="text" id="longitude" name="longitude" required value="<?= htmlspecialchars($old['longitude'] ?? '') ?>"><br><br>
+
+            <label for="foto">Foto (opcional):</label><br>
+            <input type="file" id="foto" name="foto" accept="image/*"><br><br>
+
+            <button type="submit" class="btn">Salvar</button>
+        </form>
+
+        <div class="menu">
+            <a href="index.php?action=listar" class="btn">Ver Lista</a>
+        </div>
+    </main>
+
+    <footer>
+        &copy; 2025 Sistema de Registro Urbano
+    </footer>
+
+    <script>
+    (function() {
+        var tipoInput = document.getElementById('tipo_input');
+        var tipoSelect = document.getElementById('tipo_select');
+        var tipoOutroWrapper = document.getElementById('tipo_outro_wrapper');
+        var tipoOutro = document.getElementById('tipo_outro');
+
+        // Constrói mapa nome(lowercase) -> id a partir das opções do select (fonte confiável)
+        var tiposMap = {};
+        Array.from(tipoSelect.options).forEach(function(opt) {
+            var val = opt.value;
+            var text = opt.textContent.trim();
+            if (val && val !== 'other') {
+                tiposMap[text.toLowerCase()] = val;
+            }
+        });
+
+        // Sincroniza select a partir do input visível
+        function syncSelectFromInput() {
+            var val = (tipoInput.value || '').trim();
+            if (!val) {
+                tipoSelect.value = '';
+                tipoOutroWrapper.style.display = 'none';
+                return;
+            }
+
+            var key = val.toLowerCase();
+            if (tiposMap[key]) {
+                tipoSelect.value = tiposMap[key];
+                tipoOutroWrapper.style.display = 'none';
+                // limpa campo extra caso exista
+                if (tipoOutro) tipoOutro.value = '';
+            } else if (val.toLowerCase() === 'outro') {
+                tipoSelect.value = 'other';
+                tipoOutroWrapper.style.display = 'block';
+            } else {
+                // não encontrou correspondência => marca 'other' e copia valor para campo extra
+                tipoSelect.value = 'other';
+                tipoOutroWrapper.style.display = 'block';
+                if (tipoOutro) tipoOutro.value = val;
+            }
+        }
+
+        // Quando usuário digita/seleciona no datalist
+        tipoInput.addEventListener('input', syncSelectFromInput);
+
+        // Se o select for alterado manualmente (raro), atualiza o input
+        tipoSelect.addEventListener('change', function() {
+            var sel = tipoSelect.value;
+            if (sel === 'other') {
+                tipoOutroWrapper.style.display = 'block';
+                tipoInput.value = tipoOutro.value || '';
+            } else {
+                // procura o texto correspondente no select
+                var text = '';
+                Array.from(tipoSelect.options).forEach(function(opt) {
+                    if (opt.value === sel) text = opt.textContent.trim();
+                });
+                tipoInput.value = text;
+                tipoOutroWrapper.style.display = 'none';
+            }
+        });
+
+        // Inicializa sincronização (caso haja valor antigo)
+        syncSelectFromInput();
+    })();
+    </script>
+</body>
+</html>
