@@ -1,0 +1,518 @@
+[1mdiff --git a/htdocs016112025/controller/PontoController.php.txt b/htdocs016112025/controller/PontoController.php.txt[m
+[1mdeleted file mode 100644[m
+[1mindex b1f91c9..0000000[m
+[1m--- a/htdocs016112025/controller/PontoController.php.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,217 +0,0 @@[m
+[31m-[m
+[31m-<?php [m
+[31m-// Carrega as classes de modelo necessárias[m
+[31m-require_once "model/Ponto.php";[m
+[31m-require_once "model/PontoDAO.php";[m
+[31m-require_once "model/Tipo.php";[m
+[31m-require_once "model/TipoDAO.php";[m
+[31m-[m
+[31m-// Garante sessão para flash messages[m
+[31m-if (session_status() !== PHP_SESSION_ACTIVE) {[m
+[31m-    session_start();[m
+[31m-}[m
+[31m-[m
+[31m-/**[m
+[31m- * PontoController[m
+[31m- *[m
+[31m- * Controlador responsável pelas ações relacionadas aos "pontos" (problemas urbanos).[m
+[31m- */[m
+[31m-class PontoController {[m
+[31m-[m
+[31m-    private $dao;[m
+[31m-[m
+[31m-    public function __construct() {[m
+[31m-        $this->dao = new PontoDAO();[m
+[31m-    }[m
+[31m-[m
+[31m-    /**[m
+[31m-     * home()[m
+[31m-     */[m
+[31m-    public function home() {[m
+[31m-        include "view/home.php";[m
+[31m-    }[m
+[31m-[m
+[31m-    /**[m
+[31m-     * form()[m
+[31m-     * Carrega tipos do banco e flash messages antes de incluir a view.[m
+[31m-     */[m
+[31m-    public function form() {[m
+[31m-        $tipoDao = new TipoDAO();[m
+[31m-        $tipos = $tipoDao->todos();[m
+[31m-[m
+[31m-        // Recupera mensagens de sessão (flash) e limpa[m
+[31m-        $errors = $_SESSION['errors'] ?? [];[m
+[31m-        $old = $_SESSION['old'] ?? [];[m
+[31m-        unset($_SESSION['errors'], $_SESSION['old']);[m
+[31m-[m
+[31m-        include "view/form.php";[m
+[31m-    }[m
+[31m-[m
+[31m-    /**[m
+[31m-     * salvar()[m
+[31m-     * - valida campos[m
+[31m-     * - processa upload com checagem de MIME e tamanho[m
+[31m-     * - resolve tipo via select (ou texto livre em 'Outro')[m
+[31m-     * - insere no banco e fornece flash messages[m
+[31m-     */[m
+[31m-    public function salvar() {[m
+[31m-        $errors = [];[m
+[31m-        $old = [];[m
+[31m-[m
+[31m-        // Inputs básicos e trimming[m
+[31m-        $tipo_select = $_POST['tipo_select'] ?? '';[m
+[31m-        $tipo_texto = isset($_POST['tipo']) ? trim($_POST['tipo']) : '';[m
+[31m-        $descricao = isset($_POST['descricao']) ? trim($_POST['descricao']) : '';[m
+[31m-        $latitudeRaw = isset($_POST['latitude']) ? trim($_POST['latitude']) : '';[m
+[31m-        $longitudeRaw = isset($_POST['longitude']) ? trim($_POST['longitude']) : '';[m
+[31m-[m
+[31m-        // Guarda para repopular o formulário em caso de erro[m
+[31m-        $old = [[m
+[31m-            'tipo_select' => $tipo_select,[m
+[31m-            'tipo' => $tipo_texto,[m
+[31m-            'descricao' => $descricao,[m
+[31m-            'latitude' => $latitudeRaw,[m
+[31m-            'longitude' => $longitudeRaw[m
+[31m-        ];[m
+[31m-[m
+[31m-        // Validação do tipo (usaremos $tipoNome para gravar)[m
+[31m-        $tipoNome = '';[m
+[31m-[m
+[31m-        if ($tipo_select !== '') {[m
+[31m-            if ($tipo_select === 'other') {[m
+[31m-                // O usuário informou um tipo livre[m
+[31m-                if ($tipo_texto === '') {[m
+[31m-                    $errors[] = "Informe o tipo do problema.";[m
+[31m-                } elseif (mb_strlen($tipo_texto) > 100) {[m
+[31m-                    $errors[] = "O campo 'Tipo' deve ter no máximo 100 caracteres.";[m
+[31m-                } else {[m
+[31m-                    $tipoNome = $tipo_texto;[m
+[31m-                }[m
+[31m-            } else {[m
+[31m-                // Tipo selecionado por id -> buscar nome no banco[m
+[31m-                $tipoDao = new TipoDAO();[m
+[31m-                $tipoObj = $tipoDao->buscarPorId($tipo_select);[m
+[31m-                if ($tipoObj) {[m
+[31m-                    $tipoNome = $tipoObj->nome;[m
+[31m-                } else {[m
+[31m-                    $errors[] = "Tipo selecionado inválido.";[m
+[31m-                }[m
+[31m-            }[m
+[31m-        } else {[m
+[31m-            $errors[] = "Selecione um tipo de problema.";[m
+[31m-        }[m
+[31m-[m
+[31m-        // Validações adicionais[m
+[31m-        if ($descricao === '') {[m
+[31m-            $errors[] = "O campo 'Descrição' é obrigatório.";[m
+[31m-        }[m
+[31m-[m
+[31m-        $latitude = filter_var($latitudeRaw, FILTER_VALIDATE_FLOAT);[m
+[31m-        $longitude = filter_var($longitudeRaw, FILTER_VALIDATE_FLOAT);[m
+[31m-[m
+[31m-        if ($latitude === false || $latitude < -90 || $latitude > 90) {[m
+[31m-            $errors[] = "Latitude inválida. Use um número entre -90 e 90.";[m
+[31m-        }[m
+[31m-[m
+[31m-        if ($longitude === false || $longitude < -180 || $longitude > 180) {[m
+[31m-            $errors[] = "Longitude inválida. Use um número entre -180 e 180.";[m
+[31m-        }[m
+[31m-[m
+[31m-        // Processamento do upload (opcional)[m
+[31m-        $fotoPath = null;[m
+[31m-        if (isset($_FILES['foto']) && $_FILES['foto']['error'] !== UPLOAD_ERR_NO_FILE) {[m
+[31m-            if ($_FILES['foto']['error'] !== UPLOAD_ERR_OK) {[m
+[31m-                $errors[] = "Erro no upload do arquivo (código: " . $_FILES['foto']['error'] . ").";[m
+[31m-            } else {[m
+[31m-                $maxBytes = 2 * 1024 * 1024; // 2 MB[m
+[31m-                if ($_FILES['foto']['size'] > $maxBytes) {[m
+[31m-                    $errors[] = "A foto deve ter no máximo 2 MB.";[m
+[31m-                } else {[m
+[31m-                    $finfo = finfo_open(FILEINFO_MIME_TYPE);[m
+[31m-                    $mime = finfo_file($finfo, $_FILES['foto']['tmp_name']);[m
+[31m-                    finfo_close($finfo);[m
+[31m-[m
+[31m-                    $mimeToExt = [[m
+[31m-                        'image/jpeg' => 'jpg',[m
+[31m-                        'image/pjpeg' => 'jpg',[m
+[31m-                        'image/png' => 'png',[m
+[31m-                        'image/webp' => 'webp'[m
+[31m-                    ];[m
+[31m-[m
+[31m-                    if (!isset($mimeToExt[$mime])) {[m
+[31m-                        $errors[] = "Tipo de arquivo não permitido. Envie JPG, PNG ou WEBP.";[m
+[31m-                    } else {[m
+[31m-                        $ext = $mimeToExt[$mime];[m
+[31m-                        $nomeArquivo = uniqid('', true) . "." . $ext;[m
+[31m-                        $diretorioUploads = "public/img/uploads/";[m
+[31m-[m
+[31m-                        if (!is_dir($diretorioUploads)) {[m
+[31m-                            mkdir($diretorioUploads, 0755, true);[m
+[31m-                        }[m
+[31m-[m
+[31m-                        $caminho = $diretorioUploads . $nomeArquivo;[m
+[31m-[m
+[31m-                        if (!move_uploaded_file($_FILES['foto']['tmp_name'], $caminho)) {[m
+[31m-                            $errors[] = "Falha ao salvar a foto enviada.";[m
+[31m-                        } else {[m
+[31m-                            $fotoPath = $caminho;[m
+[31m-                        }[m
+[31m-                    }[m
+[31m-                }[m
+[31m-            }[m
+[31m-        }[m
+[31m-[m
+[31m-        // Se houver erros, envia flash e volta ao formulário[m
+[31m-        if (!empty($errors)) {[m
+[31m-            $_SESSION['errors'] = $errors;[m
+[31m-            $_SESSION['old'] = $old;[m
+[31m-            header("Location: index.php?action=form");[m
+[31m-            exit;[m
+[31m-        }[m
+[31m-[m
+[31m-        // Monta objeto Ponto e persiste[m
+[31m-        $ponto = new Ponto([m
+[31m-            null,[m
+[31m-            $tipoNome,[m
+[31m-            $descricao,[m
+[31m-            $latitude,[m
+[31m-            $longitude,[m
+[31m-            $fotoPath,[m
+[31m-            date("Y-m-d H:i:s")[m
+[31m-        );[m
+[31m-[m
+[31m-        try {[m
+[31m-            $this->dao->inserir($ponto);[m
+[31m-            $_SESSION['success'] = "Ponto salvo com sucesso.";[m
+[31m-            header("Location: index.php?action=listar");[m
+[31m-            exit;[m
+[31m-        } catch (Exception $e) {[m
+[31m-            error_log("Erro ao inserir ponto: " . $e->getMessage());[m
+[31m-            $_SESSION['errors'] = ["Ocorreu um erro ao salvar o ponto. Tente novamente mais tarde."];[m
+[31m-            $_SESSION['old'] = $old;[m
+[31m-            header("Location: index.php?action=form");[m
+[31m-            exit;[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    /**[m
+[31m-     * listar()[m
+[31m-     * Recupera pontos e possível mensagem de sucesso (flash) antes de incluir a view.[m
+[31m-     */[m
+[31m-    public function listar() {[m
+[31m-        $pontos = $this->dao->todos();[m
+[31m-        // Recupera mensagem de sucesso (flash)[m
+[31m-        $success = $_SESSION['success'] ?? null;[m
+[31m-        unset($_SESSION['success']);[m
+[31m-        include "view/lista.php";[m
+[31m-    }[m
+[31m-[m
+[31m-    /**[m
+[31m-     * mapa($id)[m
+[31m-     */[m
+[31m-    public function mapa($id) {[m
+[31m-        $ponto = $this->dao->buscarPorId($id);[m
+[31m-        include "view/mapa.php";[m
+[31m-    }[m
+[31m-}[m
+[31m-?>[m
+\ No newline at end of file[m
+[1mdiff --git a/htdocs016112025/model/Tipo.php.txt b/htdocs016112025/model/Tipo.php.txt[m
+[1mdeleted file mode 100644[m
+[1mindex 9358158..0000000[m
+[1m--- a/htdocs016112025/model/Tipo.php.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,15 +0,0 @@[m
+[31m-<?php[m
+[31m-// filepath: htdocs06112025/model/Tipo.php[m
+[31m-class Tipo {[m
+[31m-    public $id;[m
+[31m-    public $nome;[m
+[31m-    public $descricao;[m
+[31m-[m
+[31m-    public function __construct($id, $nome, $descricao = null) {[m
+[31m-        $this->id = $id;[m
+[31m-        $this->nome = $nome;[m
+[31m-        $this->descricao = $descricao;[m
+[31m-    }[m
+[31m-}[m
+[31m-?>[m
+[31m-```[m
+\ No newline at end of file[m
+[1mdiff --git a/htdocs016112025/model/TipoDAO.php.txt b/htdocs016112025/model/TipoDAO.php.txt[m
+[1mdeleted file mode 100644[m
+[1mindex 485f1ee..0000000[m
+[1m--- a/htdocs016112025/model/TipoDAO.php.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,35 +0,0 @@[m
+[31m-<?php[m
+[31m-// filepath: htdocs06112025/model/TipoDAO.php[m
+[31m-require_once "model/Database.php";[m
+[31m-require_once "model/Tipo.php";[m
+[31m-[m
+[31m-class TipoDAO {[m
+[31m-    private $pdo;[m
+[31m-[m
+[31m-    public function __construct() {[m
+[31m-        $this->pdo = Database::getConnection();[m
+[31m-    }[m
+[31m-[m
+[31m-    // Retorna todos os tipos[m
+[31m-    public function todos() {[m
+[31m-        $stmt = $this->pdo->query("SELECT id, nome, descricao FROM tipos_problema ORDER BY nome ASC");[m
+[31m-        $tipos = [];[m
+[31m-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {[m
+[31m-            $tipos[] = new Tipo($row['id'], $row['nome'], $row['descricao']);[m
+[31m-        }[m
+[31m-        return $tipos;[m
+[31m-    }[m
+[31m-[m
+[31m-    // Busca por id[m
+[31m-    public function buscarPorId($id) {[m
+[31m-        $stmt = $this->pdo->prepare("SELECT id, nome, descricao FROM tipos_problema WHERE id = ?");[m
+[31m-        $stmt->execute([$id]);[m
+[31m-        $row = $stmt->fetch(PDO::FETCH_ASSOC);[m
+[31m-        if ($row) {[m
+[31m-            return new Tipo($row['id'], $row['nome'], $row['descricao']);[m
+[31m-        }[m
+[31m-        return null;[m
+[31m-    }[m
+[31m-}[m
+[31m-?>[m
+[31m-```[m
+\ No newline at end of file[m
+[1mdiff --git a/htdocs016112025/view/form.php.txt b/htdocs016112025/view/form.php.txt[m
+[1mdeleted file mode 100644[m
+[1mindex 3e55fe2..0000000[m
+[1m--- a/htdocs016112025/view/form.php.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,168 +0,0 @@[m
+[31m-<!DOCTYPE html>[m
+[31m-<html lang="pt-br">[m
+[31m-<head>[m
+[31m-    <meta charset="UTF-8">[m
+[31m-    <title>Cadastrar Problemas em seu Bairro</title>[m
+[31m-    <link rel="stylesheet" href="public/css/style.css">[m
+[31m-    <style>[m
+[31m-        /* Esconde o select visualmente, mas mantém no DOM para submissão */[m
+[31m-        .hidden-select {[m
+[31m-            position: absolute !important;[m
+[31m-            left: -9999px !important;[m
+[31m-            width: 1px !important;[m
+[31m-            height: 1px !important;[m
+[31m-            overflow: hidden !important;[m
+[31m-        }[m
+[31m-    </style>[m
+[31m-</head>[m
+[31m-<body>[m
+[31m-    <header>[m
+[31m-        <h1>Cadastrar Problemas em seu Bairro</h1>[m
+[31m-        <p>Informe os dados para registrar um novo problema</p>[m
+[31m-    </header>[m
+[31m-[m
+[31m-    <main>[m
+[31m-        <?php[m
+[31m-        // $errors, $old e $tipos são definidos pelo controller (form())[m
+[31m-        $errors = $errors ?? [];[m
+[31m-        $old = $old ?? [];[m
+[31m-        $tipos = $tipos ?? [];[m
+[31m-[m
+[31m-        if (!empty($errors)): ?>[m
+[31m-            <div style="max-width:600px;margin:0 auto;background:#ffe6e6;border:1px solid #ffb3b3;padding:12px;border-radius:6px;">[m
+[31m-                <strong>Foram encontrados os seguintes erros:</strong>[m
+[31m-                <ul>[m
+[31m-                    <?php foreach ($errors as $err): ?>[m
+[31m-                        <li><?= htmlspecialchars($err) ?></li>[m
+[31m-                    <?php endforeach; ?>[m
+[31m-                </ul>[m
+[31m-            </div>[m
+[31m-        <?php endif; ?>[m
+[31m-[m
+[31m-        <form method="post" action="index.php?action=salvar" enctype="multipart/form-data" style="max-width:600px;margin:16px auto;">[m
+[31m-            <!-- Input com datalist exibindo os tipos (apenas valores) -->[m
+[31m-            <label for="tipo_input">Tipo de Ponto:</label><br>[m
+[31m-            <input list="tipos_list" id="tipo_input" name="tipo" required[m
+[31m-                   style="width:100%;padding:8px;border-radius:5px;"[m
+[31m-                   placeholder="Digite ou escolha um tipo"[m
+[31m-                   value="<?= htmlspecialchars($old['tipo'] ?? '') ?>">[m
+[31m-            <datalist id="tipos_list">[m
+[31m-                <?php foreach ($tipos as $t): ?>[m
+[31m-                    <option value="<?= htmlspecialchars($t->nome) ?>"></option>[m
+[31m-                <?php endforeach; ?>[m
+[31m-                <option value="Outro"></option>[m
+[31m-            </datalist>[m
+[31m-            <br><br>[m
+[31m-[m
+[31m-            <!-- Select oculto que o controller espera (tipo_select).[m
+[31m-                 Ele será atualizado via JS com o id correspondente ou 'other'. -->[m
+[31m-            <select id="tipo_select" name="tipo_select" class="hidden-select" required>[m
+[31m-                <option value="">-- selecione --</option>[m
+[31m-                <?php foreach ($tipos as $t): ?>[m
+[31m-                    <option value="<?= htmlspecialchars($t->id) ?>"[m
+[31m-                        <?= (isset($old['tipo_select']) && $old['tipo_select'] == $t->id) ? 'selected' : '' ?>>[m
+[31m-                        <?= htmlspecialchars($t->nome) ?>[m
+[31m-                    </option>[m
+[31m-                <?php endforeach; ?>[m
+[31m-                <option value="other" <?= (isset($old['tipo_select']) && $old['tipo_select']=='other') ? 'selected' : '' ?>>Outro</option>[m
+[31m-            </select>[m
+[31m-[m
+[31m-            <!-- Campo extra visível se for 'Outro' (sincronizado por JS) -->[m
+[31m-            <div id="tipo_outro_wrapper" style="display: <?= (isset($old['tipo_select']) && $old['tipo_select']=='other') ? 'block' : 'none' ?>;">[m
+[31m-                <label for="tipo_outro">Especifique o tipo (se escolheu 'Outro'):</label><br>[m
+[31m-                <input type="text" id="tipo_outro" name="tipo_outro" value="<?= htmlspecialchars($old['tipo'] ?? '') ?>"><br><br>[m
+[31m-            </div>[m
+[31m-[m
+[31m-            <label for="descricao">Descrição:</label><br>[m
+[31m-            <textarea id="descricao" name="descricao" rows="4" required><?= htmlspecialchars($old['descricao'] ?? '') ?></textarea><br><br>[m
+[31m-[m
+[31m-            <label for="latitude">Latitude:</label><br>[m
+[31m-            <input type="text" id="latitude" name="latitude" required value="<?= htmlspecialchars($old['latitude'] ?? '') ?>"><br><br>[m
+[31m-[m
+[31m-            <label for="longitude">Longitude:</label><br>[m
+[31m-            <input type="text" id="longitude" name="longitude" required value="<?= htmlspecialchars($old['longitude'] ?? '') ?>"><br><br>[m
+[31m-[m
+[31m-            <label for="foto">Foto (opcional):</label><br>[m
+[31m-            <input type="file" id="foto" name="foto" accept="image/*"><br><br>[m
+[31m-[m
+[31m-            <button type="submit" class="btn">Salvar</button>[m
+[31m-        </form>[m
+[31m-[m
+[31m-        <div class="menu">[m
+[31m-            <a href="index.php?action=listar" class="btn">Ver Lista</a>[m
+[31m-        </div>[m
+[31m-    </main>[m
+[31m-[m
+[31m-    <footer>[m
+[31m-        &copy; 2025 Sistema de Registro Urbano[m
+[31m-    </footer>[m
+[31m-[m
+[31m-    <script>[m
+[31m-    (function() {[m
+[31m-        var tipoInput = document.getElementById('tipo_input');[m
+[31m-        var tipoSelect = document.getElementById('tipo_select');[m
+[31m-        var tipoOutroWrapper = document.getElementById('tipo_outro_wrapper');[m
+[31m-        var tipoOutro = document.getElementById('tipo_outro');[m
+[31m-[m
+[31m-        // Constrói mapa nome(lowercase) -> id a partir das opções do select (fonte confiável)[m
+[31m-        var tiposMap = {};[m
+[31m-        Array.from(tipoSelect.options).forEach(function(opt) {[m
+[31m-            var val = opt.value;[m
+[31m-            var text = opt.textContent.trim();[m
+[31m-            if (val && val !== 'other') {[m
+[31m-                tiposMap[text.toLowerCase()] = val;[m
+[31m-            }[m
+[31m-        });[m
+[31m-[m
+[31m-        // Sincroniza select a partir do input visível[m
+[31m-        function syncSelectFromInput() {[m
+[31m-            var val = (tipoInput.value || '').trim();[m
+[31m-            if (!val) {[m
+[31m-                tipoSelect.value = '';[m
+[31m-                tipoOutroWrapper.style.display = 'none';[m
+[31m-                return;[m
+[31m-            }[m
+[31m-[m
+[31m-            var key = val.toLowerCase();[m
+[31m-            if (tiposMap[key]) {[m
+[31m-                tipoSelect.value = tiposMap[key];[m
+[31m-                tipoOutroWrapper.style.display = 'none';[m
+[31m-                // limpa campo extra caso exista[m
+[31m-                if (tipoOutro) tipoOutro.value = '';[m
+[31m-            } else if (val.toLowerCase() === 'outro') {[m
+[31m-                tipoSelect.value = 'other';[m
+[31m-                tipoOutroWrapper.style.display = 'block';[m
+[31m-            } else {[m
+[31m-                // não encontrou correspondência => marca 'other' e copia valor para campo extra[m
+[31m-                tipoSelect.value = 'other';[m
+[31m-                tipoOutroWrapper.style.display = 'block';[m
+[31m-                if (tipoOutro) tipoOutro.value = val;[m
+[31m-            }[m
+[31m-        }[m
+[31m-[m
+[31m-        // Quando usuário digita/seleciona no datalist[m
+[31m-        tipoInput.addEventListener('input', syncSelectFromInput);[m
+[31m-[m
+[31m-        // Se o select for alterado manualmente (raro), atualiza o input[m
+[31m-        tipoSelect.addEventListener('change', function() {[m
+[31m-            var sel = tipoSelect.value;[m
+[31m-            if (sel === 'other') {[m
+[31m-                tipoOutroWrapper.style.display = 'block';[m
+[31m-                tipoInput.value = tipoOutro.value || '';[m
+[31m-            } else {[m
+[31m-                // procura o texto correspondente no select[m
+[31m-                var text = '';[m
+[31m-                Array.from(tipoSelect.options).forEach(function(opt) {[m
+[31m-                    if (opt.value === sel) text = opt.textContent.trim();[m
+[31m-                });[m
+[31m-                tipoInput.value = text;[m
+[31m-                tipoOutroWrapper.style.display = 'none';[m
+[31m-            }[m
+[31m-        });[m
+[31m-[m
+[31m-        // Inicializa sincronização (caso haja valor antigo)[m
+[31m-        syncSelectFromInput();[m
+[31m-    })();[m
+[31m-    </script>[m
+[31m-</body>[m
+[31m-</html>[m
+\ No newline at end of file[m
+[1mdiff --git a/htdocs016112025/view/lista.php.txt b/htdocs016112025/view/lista.php.txt[m
+[1mdeleted file mode 100644[m
+[1mindex b6174ac..0000000[m
+[1m--- a/htdocs016112025/view/lista.php.txt[m
+[1m+++ /dev/null[m
+[36m@@ -1,48 +0,0 @@[m
+[31m-<!DOCTYPE html>[m
+[31m-<html lang="pt-br">[m
+[31m-<head>[m
+[31m-    <meta charset="UTF-8">[m
+[31m-    <title>Problemas Cadastrados</title>[m
+[31m-    <link rel="stylesheet" href="public/css/style.css">[m
+[31m-</head>[m
+[31m-<body>[m
+[31m-    <header>[m
+[31m-        <h1>Problemas Urbanos Registrados</h1>[m
+[31m-        <p>Veja os registros enviados pela comunidade</p>[m
+[31m-    </header>[m
+[31m-[m
+[31m-    <main>[m
+[31m-        <?php[m
+[31m-        // Exibe mensagem de sucesso (flash) se existir[m
+[31m-        $success = $success ?? null;[m
+[31m-        if ($success): ?>[m
+[31m-            <div style="max-width:900px;margin:0 auto;background:#e6ffea;border:1px solid #b3ffcf;padding:12px;border-radius:6px;">[m
+[31m-                <?= htmlspecialchars($success) ?>[m
+[31m-            </div>[m
+[31m-        <?php endif; ?>[m
+[31m-[m
+[31m-        <ul class="lista-pontos">[m
+[31m-            <?php foreach ($pontos as $p): ?>[m
+[31m-                <li>[m
+[31m-                    <h3><?= htmlspecialchars($p->tipo) ?></h3>[m
+[31m-                    <p><?= nl2br(htmlspecialchars($p->descricao)) ?></p>[m
+[31m-                    <p><strong>Localização:</strong> <?= $p->latitude ?>, <?= $p->longitude ?></p>[m
+[31m-                    <?php if ($p->foto): ?>[m
+[31m-                        <p><img src="<?= $p->foto ?>" alt="Foto do ponto" style="max-width:100%;border-radius:8px;"></p>[m
+[31m-                    <?php endif; ?>[m
+[31m-                    <p><em>Enviado em: <?= date("d/m/Y H:i", strtotime($p->data_envio)) ?></em></p>[m
+[31m-                    <a href="index.php?action=mapa&id=<?= $p->id ?>" class="btn-link">Ver no mapa</a>[m
+[31m-                </li>[m
+[31m-            <?php endforeach; ?>[m
+[31m-        </ul>[m
+[31m-[m
+[31m-        <div class="menu">[m
+[31m-            <a href="index.php" class="btn">Voltar à Home</a>[m
+[31m-        </div>[m
+[31m-    </main>[m
+[31m-[m
+[31m-    <footer>[m
+[31m-        <p>&copy; <?= date("Y") ?> PROBLEMAS URBANOS</p>[m
+[31m-    </footer>[m
+[31m-</body>[m
+[31m-</html>[m
+\ No newline at end of file[m
