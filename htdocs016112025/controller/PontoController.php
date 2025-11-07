@@ -1,10 +1,7 @@
-
 <?php 
 // Carrega as classes de modelo necessárias
-require_once "model/Ponto.php";
-require_once "model/PontoDAO.php";
-require_once "model/Tipo.php";
-require_once "model/TipoDAO.php";
+require_once __DIR__ . '/../model/PontoDAO.php';
+require_once __DIR__ . '/../model/TipoDAO.php';
 
 // Garante sessão para flash messages
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -17,11 +14,15 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
  * Controlador responsável pelas ações relacionadas aos "pontos" (problemas urbanos).
  */
 class PontoController {
+    private $pontoDAO;
+    private $tipoDAO;
 
-    private $dao;
-
-    public function __construct() {
-        $this->dao = new PontoDAO();
+    public function __construct($pontoDAO, $tipoDAO) {
+        $this->pontoDAO = $pontoDAO;
+        $this->tipoDAO = $tipoDAO;
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
     }
 
     /**
@@ -36,8 +37,7 @@ class PontoController {
      * Carrega tipos do banco e flash messages antes de incluir a view.
      */
     public function form() {
-        $tipoDao = new TipoDAO();
-        $tipos = $tipoDao->todos();
+        $tipos = $this->tipoDAO->todos();
 
         // Recupera mensagens de sessão (flash) e limpa
         $errors = $_SESSION['errors'] ?? [];
@@ -89,8 +89,7 @@ class PontoController {
                 }
             } else {
                 // Tipo selecionado por id -> buscar nome no banco
-                $tipoDao = new TipoDAO();
-                $tipoObj = $tipoDao->buscarPorId($tipo_select);
+                $tipoObj = $this->tipoDAO->buscarPorId($tipo_select);
                 if ($tipoObj) {
                     $tipoNome = $tipoObj->nome;
                 } else {
@@ -181,7 +180,7 @@ class PontoController {
         );
 
         try {
-            $this->dao->inserir($ponto);
+            $this->pontoDAO->inserir($ponto);
             $_SESSION['success'] = "Ponto salvo com sucesso.";
             header("Location: index.php?action=listar");
             exit;
@@ -199,7 +198,7 @@ class PontoController {
      * Recupera pontos e possível mensagem de sucesso (flash) antes de incluir a view.
      */
     public function listar() {
-        $pontos = $this->dao->todos();
+        $pontos = $this->pontoDAO->todos();
         // Recupera mensagem de sucesso (flash)
         $success = $_SESSION['success'] ?? null;
         unset($_SESSION['success']);
@@ -210,8 +209,58 @@ class PontoController {
      * mapa($id)
      */
     public function mapa($id) {
-        $ponto = $this->dao->buscarPorId($id);
+        $ponto = $this->pontoDAO->buscarPorId($id);
         include "view/mapa.php";
+    }
+
+    // Carrega registro e exibe form populado para edição
+    public function editar() {
+        $id = $_GET['id'] ?? null;
+        if (!$id) {
+            $_SESSION['errors'] = ['ID inválido para edição.'];
+            header('Location: index.php?action=listar');
+            exit;
+        }
+
+        $ponto = $this->pontoDAO->buscarPorId($id);
+        if (!$ponto) {
+            $_SESSION['errors'] = ['Registro não encontrado.'];
+            header('Location: index.php?action=listar');
+            exit;
+        }
+
+        // Preenche array $old esperado pelo form
+        $old = [
+            'id' => $ponto->id,
+            'tipo' => $ponto->tipo ?? ($ponto->tipo_nome ?? ''),
+            'tipo_select' => $ponto->tipo_id ?? null,
+            'descricao' => $ponto->descricao ?? '',
+            'latitude' => $ponto->latitude ?? '',
+            'longitude' => $ponto->longitude ?? ''
+        ];
+
+        $tipos = $this->tipoDAO->todos();
+        include __DIR__ . '/../view/form.php';
+    }
+
+    // Deleta registro recebido via POST e redireciona para lista
+    public function deletar() {
+        $id = $_POST['id'] ?? null;
+        if (!$id) {
+            $_SESSION['errors'] = ['ID inválido para exclusão.'];
+            header('Location: index.php?action=listar');
+            exit;
+        }
+
+        $ok = $this->pontoDAO->deletar($id);
+        if ($ok) {
+            $_SESSION['success'] = 'Registro excluído com sucesso.';
+        } else {
+            $_SESSION['errors'] = ['Falha ao excluir registro.'];
+        }
+
+        header('Location: index.php?action=listar');
+        exit;
     }
 }
 ?>
