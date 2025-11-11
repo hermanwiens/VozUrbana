@@ -1,0 +1,44 @@
+[1mdiff --git a/htdocs016112025/view/lista.php b/htdocs016112025/view/lista.php[m
+[1mindex b6174ac..043f9a2 100644[m
+[1m--- a/htdocs016112025/view/lista.php[m
+[1m+++ b/htdocs016112025/view/lista.php[m
+[36m@@ -4,6 +4,11 @@[m
+     <meta charset="UTF-8">[m
+     <title>Problemas Cadastrados</title>[m
+     <link rel="stylesheet" href="public/css/style.css">[m
+[32m+[m[32m    <style>[m[41m[m
+[32m+[m[32m        .btn { display:inline-block; padding:6px 10px; border-radius:4px; text-decoration:none; background:#4CAF50; color:#fff; margin-right:6px; }[m[41m[m
+[32m+[m[32m        .btn-delete { background:#e74c3c; border:none; cursor:pointer; padding:6px 10px; color:#fff; border-radius:4px; }[m[41m[m
+[32m+[m[32m        .btn-link { background:#3498db; color:#fff; padding:6px 10px; border-radius:4px; text-decoration:none; }[m[41m[m
+[32m+[m[32m    </style>[m[41m[m
+ </head>[m
+ <body>[m
+     <header>[m
+[36m@@ -26,12 +31,22 @@[m
+                 <li>[m
+                     <h3><?= htmlspecialchars($p->tipo) ?></h3>[m
+                     <p><?= nl2br(htmlspecialchars($p->descricao)) ?></p>[m
+[31m-                    <p><strong>Localização:</strong> <?= $p->latitude ?>, <?= $p->longitude ?></p>[m
+[31m-                    <?php if ($p->foto): ?>[m
+[31m-                        <p><img src="<?= $p->foto ?>" alt="Foto do ponto" style="max-width:100%;border-radius:8px;"></p>[m
+[32m+[m[32m                    <p><strong>Localização:</strong> <?= htmlspecialchars($p->latitude) ?>, <?= htmlspecialchars($p->longitude) ?></p>[m[41m[m
+[32m+[m[32m                    <?php if (!empty($p->foto)): ?>[m[41m[m
+[32m+[m[32m                        <p><img src="<?= htmlspecialchars($p->foto) ?>" alt="Foto do ponto" style="max-width:100%;border-radius:8px;"></p>[m[41m[m
+                     <?php endif; ?>[m
+[31m-                    <p><em>Enviado em: <?= date("d/m/Y H:i", strtotime($p->data_envio)) ?></em></p>[m
+[31m-                    <a href="index.php?action=mapa&id=<?= $p->id ?>" class="btn-link">Ver no mapa</a>[m
+[32m+[m[32m                    <p><em>Enviado em: <?= htmlspecialchars(date("d/m/Y H:i", strtotime($p->data_envio))) ?></em></p>[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m                    <a href="index.php?action=mapa&id=<?= urlencode($p->id) ?>" class="btn-link">Ver no mapa</a>[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m                    <!-- Botão de editar -->[m[41m[m
+[32m+[m[32m                    <a href="index.php?action=editar&id=<?= urlencode($p->id) ?>" class="btn">Editar</a>[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m                    <!-- Form de deletar (POST) -->[m[41m[m
+[32m+[m[32m                    <form method="post" action="index.php?action=deletar" style="display:inline" onsubmit="return confirm('Confirma exclusão deste registro?');">[m[41m[m
+[32m+[m[32m                        <input type="hidden" name="id" value="<?= htmlspecialchars($p->id) ?>">[m[41m[m
+[32m+[m[32m                        <button type="submit" class="btn-delete">Excluir</button>[m[41m[m
+[32m+[m[32m                    </form>[m[41m[m
+                 </li>[m
+             <?php endforeach; ?>[m
+         </ul>[m
